@@ -8,18 +8,34 @@ import (
 	"os"
 )
 
-func main() {
-	defer database.DB.Close()
-
-	// add database
-	_, err := database.Init()
-	if err != nil {
-		log.Println("connection to DB failed, aborting...")
-		log.Fatal(err)
+func withAPIKey(fn http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !isValidAPIKey(r.URL.Query().Get("key")) {
+			respondErr(w, r, http.StatusUnauthorized, "不正なAPIキーです")
+		}
+		fn(w, r)
 	}
+}
+func isValidAPIKey(key string) bool {
+	return key == "abc123"
+}
 
-	log.Println("connected to DB")
+func withData(d *pg.Session, f http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer database.DB.Close()
 
+		// add database
+		_, err := database.Init()
+		if err != nil {
+			log.Println("connection to DB failed, aborting...")
+			log.Fatal(err)
+		}
+		setVar(r, "db", database.DB("ballots"))
+		f(w, r)
+	}
+}
+
+func main() {
 	// print env
 	env := os.Getenv("APP_ENV")
 	if env == "production" {
